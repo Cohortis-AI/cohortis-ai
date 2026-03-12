@@ -42,7 +42,9 @@ Lead Agent (Strategic)
 ```
 
 > [!NOTE]
-> **Used in production by [Fleece AI](https://fleeceai.app)** — Autonomous AI Agents & AI Workflow platform with 3,000+ app integrations serving thousands of users. Fleece AI's autonomous agent teams are powered by the Cohortis engine.
+> **Used in production by [Fleece AI](https://fleeceai.app)** — Autonomous AI Agents & AI Workflow platform serving thousands of users. Fleece AI combines the Cohortis engine with 3,000+ app integrations via their own MCP layer.
+>
+> Cohortis is **natively integrable** — a standalone orchestration engine you can plug into any integration layer (MCP servers, custom APIs, webhooks).
 
 <br />
 
@@ -262,7 +264,7 @@ approval_gates
 <td>
 <a href="https://fleeceai.app"><strong>Fleece AI</strong></a>
 <br />
-Autonomous AI Agents & AI Workflow platform with <strong>3,000+ app integrations</strong> serving thousands of users. Uses Cohortis for autonomous AI agent teams that handle email, calendar, data analysis, and more.
+Autonomous AI Agents & AI Workflow platform serving thousands of users. Uses Cohortis as its core agent orchestration engine, extended with 3,000+ app integrations via Pipedream MCP.
 </td>
 </tr>
 </table>
