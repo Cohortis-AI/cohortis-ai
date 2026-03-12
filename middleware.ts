@@ -7,11 +7,11 @@ export function middleware(request: NextRequest) {
   // Skip auth check in dev mode
   if (process.env.DISABLE_AUTH === "true") {
     const response = NextResponse.next();
-    // Set workspace from cookie
-    const workspaceId = request.cookies.get("cohortis_workspace_id")?.value;
-    if (workspaceId) {
-      response.headers.set("x-workspace-id", workspaceId);
-    }
+    // Always use dev workspace in dev mode
+    const DEV_WORKSPACE_ID = "00000000-0000-0000-0000-000000000010";
+    const workspaceId =
+      request.cookies.get("cohortis_workspace_id")?.value || DEV_WORKSPACE_ID;
+    response.headers.set("x-workspace-id", workspaceId);
     return response;
   }
 

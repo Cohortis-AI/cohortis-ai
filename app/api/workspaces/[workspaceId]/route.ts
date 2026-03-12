@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth/config";
+import { getEffectiveSession } from "@/lib/auth-utils";
 import {
   getWorkspaceById,
   updateWorkspace,
@@ -11,7 +11,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
-  const session = await auth();
+  const session = await getEffectiveSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -36,7 +36,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
-  const session = await auth();
+  const session = await getEffectiveSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -58,7 +58,7 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
-  const session = await auth();
+  const session = await getEffectiveSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

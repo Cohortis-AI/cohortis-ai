@@ -15,6 +15,9 @@ import { createHierarchyTools } from "@/lib/agents/hierarchy-tools";
 import { getWorkspaceContext } from "@/lib/workspace/context";
 import { notificationBus } from "@/lib/notifications/event-bus";
 import { pickActiveVariant } from "@/lib/agents/ab-selector";
+import { checkAndAutoDeploy } from "@/lib/agents/ab-deploy";
+import { checkBudget, recordSpend } from "@/lib/agents/budget";
+import { executeExternalAgent } from "@/lib/agents/external-executor";
 import type { agents } from "@/lib/db/schema";
 
 type Agent = typeof agents.$inferSelect;
@@ -54,6 +57,29 @@ export async function executeAgentTask(params: ExecuteParams) {
     parentRunId,
     callbacks,
   } = params;
+
+  // Check agent budget before executing
+  const budgetCheck = await checkBudget(agent.id);
+  if (!budgetCheck.allowed) {
+    return {
+      runId: "",
+      status: "failed" as const,
+      error: budgetCheck.reason || "Agent budget exhausted",
+      durationMs: 0,
+    };
+  }
+
+  // Route external agents to webhook executor
+  if (agent.runtime === "external" && agent.webhookUrl) {
+    return executeExternalAgent({
+      agent,
+      task,
+      workspaceId,
+      initiatedBy,
+      parentRunId,
+      delegationDepth,
+    });
+  }
 
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -167,6 +193,11 @@ export async function executeAgentTask(params: ExecuteParams) {
       safeModelId(agent.model)
     );
 
+    // Record spend against budget
+    if (costUsd > 0) {
+      recordSpend(agent.id, costUsd).catch(() => {});
+    }
+
     // Update run record
     await updateAgentRun(run.id, {
       status: "completed",
@@ -187,13 +218,15 @@ export async function executeAgentTask(params: ExecuteParams) {
     // Update agent metrics
     await incrementAgentTaskCount(agent.id, true);
 
-    // Update A/B variant stats
+    // Update A/B variant stats and check for auto-deploy
     if (variant.variantId) {
       await updateVariantStats(variant.variantId, agent.id, run.id, {
         success: true,
         durationMs,
         tokensUsed: totalTokens,
       });
+      // Check if a variant should be auto-deployed
+      checkAndAutoDeploy(agent.id).catch(() => {});
     }
 
     notificationBus.emitNotificationUpdate(agent.userId);
@@ -226,6 +259,7 @@ export async function executeAgentTask(params: ExecuteParams) {
         durationMs,
         tokensUsed: 0,
       });
+      checkAndAutoDeploy(agent.id).catch(() => {});
     }
 
     notificationBus.emitNotificationUpdate(agent.userId);

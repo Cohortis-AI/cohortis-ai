@@ -1,19 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import useSWR from "swr";
 import { toast } from "sonner";
 import { Settings, Save, Loader2, Brain } from "lucide-react";
+import { fetcher, apiFetch } from "@/lib/api-client";
 
 export default function SettingsPage() {
+  const { data: workspace, mutate } = useSWR("/api/workspaces/current", fetcher);
+
   const [mission, setMission] = useState("");
   const [teamContext, setTeamContext] = useState("");
   const [orgContext, setOrgContext] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Load existing shared memory
+  useEffect(() => {
+    if (workspace?.sharedMemory) {
+      setMission(workspace.sharedMemory.mission || "");
+      setTeamContext(workspace.sharedMemory.teamContext || "");
+      setOrgContext(workspace.sharedMemory.orgContext || "");
+    }
+  }, [workspace]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      // TODO: Save to workspace sharedMemory
+      const res = await apiFetch("/api/workspaces/current", {
+        method: "PATCH",
+        body: JSON.stringify({
+          sharedMemory: { mission, teamContext, orgContext },
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error || "Failed to save");
+        return;
+      }
+      mutate();
       toast.success("Settings saved");
     } catch {
       toast.error("Failed to save");

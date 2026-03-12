@@ -169,6 +169,12 @@ export const agents = pgTable("agents", {
   model: text("model").default("gpt-5.2"),
   provider: text("provider").default("openai"),
 
+  // BYOA (Bring Your Own Agent)
+  runtime: text("runtime").default("internal"), // "internal" | "external"
+  webhookUrl: text("webhook_url"),
+  webhookSecret: text("webhook_secret"),
+  webhookHeaders: json("webhook_headers").$type<Record<string, string>>(),
+
   // Custom skills
   customSkills: json("custom_skills").$type<
     Array<{
@@ -461,6 +467,209 @@ export const integrationsRelations = relations(integrations, ({ one }) => ({
   }),
   user: one(users, {
     fields: [integrations.userId],
+    references: [users.id],
+  }),
+}));
+
+// ─── Goals ───
+
+export const goalStatusEnum = pgEnum("goal_status", [
+  "active",
+  "completed",
+  "cancelled",
+]);
+
+export const goals = pgTable("goals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" })
+    .notNull(),
+  parentGoalId: uuid("parent_goal_id").references((): any => goals.id, {
+    onDelete: "set null",
+  }),
+  assignedAgentId: uuid("assigned_agent_id").references(() => agents.id, {
+    onDelete: "set null",
+  }),
+
+  title: text("title").notNull(),
+  description: text("description"),
+  status: goalStatusEnum("status").default("active").notNull(),
+  priority: integer("priority").default(0), // 0=low, 1=medium, 2=high, 3=critical
+
+  dueAt: timestamp("due_at"),
+  completedAt: timestamp("completed_at"),
+
+  // Metrics
+  progress: integer("progress").default(0), // 0-100
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const goalsRelations = relations(goals, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [goals.workspaceId],
+    references: [workspaces.id],
+  }),
+  parentGoal: one(goals, {
+    fields: [goals.parentGoalId],
+    references: [goals.id],
+    relationName: "goalHierarchy",
+  }),
+  subGoals: many(goals, { relationName: "goalHierarchy" }),
+  assignedAgent: one(agents, {
+    fields: [goals.assignedAgentId],
+    references: [agents.id],
+  }),
+}));
+
+// ─── Heartbeats ───
+
+export const heartbeatFrequencyEnum = pgEnum("heartbeat_frequency", [
+  "5m",
+  "15m",
+  "30m",
+  "1h",
+  "4h",
+  "12h",
+  "24h",
+]);
+
+export const heartbeats = pgTable("heartbeats", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" })
+    .notNull(),
+  agentId: uuid("agent_id")
+    .references(() => agents.id, { onDelete: "cascade" })
+    .notNull(),
+
+  task: text("task").notNull(), // What the agent should do on each heartbeat
+  frequency: heartbeatFrequencyEnum("frequency").default("1h").notNull(),
+
+  isEnabled: boolean("is_enabled").default(true),
+
+  lastRunAt: timestamp("last_run_at"),
+  nextRunAt: timestamp("next_run_at"),
+  totalRuns: integer("total_runs").default(0),
+  lastStatus: text("last_status"), // "completed" | "failed"
+  lastResult: text("last_result"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const heartbeatsRelations = relations(heartbeats, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [heartbeats.workspaceId],
+    references: [workspaces.id],
+  }),
+  agent: one(agents, {
+    fields: [heartbeats.agentId],
+    references: [agents.id],
+  }),
+}));
+
+// ─── Agent Budgets ───
+
+export const agentBudgets = pgTable("agent_budgets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" })
+    .notNull(),
+  agentId: uuid("agent_id")
+    .references(() => agents.id, { onDelete: "cascade" })
+    .notNull()
+    .unique(),
+
+  monthlyLimitUsd: numeric("monthly_limit_usd", {
+    precision: 10,
+    scale: 2,
+  }).notNull(),
+  currentSpendUsd: numeric("current_spend_usd", {
+    precision: 10,
+    scale: 6,
+  })
+    .default("0")
+    .notNull(),
+
+  warningThreshold: integer("warning_threshold").default(80),
+  isThrottled: boolean("is_throttled").default(false),
+
+  periodStart: timestamp("period_start").defaultNow().notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Approval Gates ───
+
+export const approvalStatusEnum = pgEnum("approval_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const approvalGates = pgTable("approval_gates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" })
+    .notNull(),
+  agentId: uuid("agent_id")
+    .references(() => agents.id, { onDelete: "cascade" })
+    .notNull(),
+  runId: uuid("run_id").references(() => agentRuns.id, {
+    onDelete: "cascade",
+  }),
+
+  action: text("action").notNull(),
+  actionType: text("action_type").notNull(),
+
+  status: approvalStatusEnum("status").default("pending").notNull(),
+
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: uuid("reviewed_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  reviewNote: text("review_note"),
+
+  metadata: json("metadata"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ─── Agent Budgets Relations ───
+
+export const agentBudgetsRelations = relations(agentBudgets, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [agentBudgets.workspaceId],
+    references: [workspaces.id],
+  }),
+  agent: one(agents, {
+    fields: [agentBudgets.agentId],
+    references: [agents.id],
+  }),
+}));
+
+// ─── Approval Gates Relations ───
+
+export const approvalGatesRelations = relations(approvalGates, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [approvalGates.workspaceId],
+    references: [workspaces.id],
+  }),
+  agent: one(agents, {
+    fields: [approvalGates.agentId],
+    references: [agents.id],
+  }),
+  run: one(agentRuns, {
+    fields: [approvalGates.runId],
+    references: [agentRuns.id],
+  }),
+  reviewer: one(users, {
+    fields: [approvalGates.reviewedBy],
     references: [users.id],
   }),
 }));

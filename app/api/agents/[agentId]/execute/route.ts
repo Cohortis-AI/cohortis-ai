@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth/config";
+import { getEffectiveSession } from "@/lib/auth-utils";
 import { getAgentById } from "@/lib/db/queries";
 import { executeAgentTask } from "@/lib/agents/executor";
 import type { ConversationMessage } from "@/lib/agents/executor";
@@ -13,7 +13,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
-  const session = await auth();
+  const session = await getEffectiveSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

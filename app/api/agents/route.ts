@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth/config";
+import { getEffectiveSession } from "@/lib/auth-utils";
 import { getAgentsByWorkspace, createAgent, getAgentById } from "@/lib/db/queries";
 import { requireWorkspaceAccess } from "@/lib/workspace/auth";
 import { checkAgentLimit } from "@/lib/billing/plans";
 
 export async function GET(request: Request) {
-  const session = await auth();
+  const session = await getEffectiveSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
+  const session = await getEffectiveSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -62,6 +62,10 @@ export async function POST(request: Request) {
     capabilities,
     model,
     provider,
+    runtime,
+    webhookUrl,
+    webhookSecret,
+    webhookHeaders,
     customSkills,
     knowledgeFiles,
     conversationStarters,
@@ -95,6 +99,10 @@ export async function POST(request: Request) {
     capabilities: capabilities || [],
     model: model || "gpt-5.2",
     provider: provider || "openai",
+    runtime: runtime || "internal",
+    webhookUrl: webhookUrl || null,
+    webhookSecret: webhookSecret || null,
+    webhookHeaders: webhookHeaders || null,
     customSkills,
     knowledgeFiles,
     conversationStarters,

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
+import { DevWorkspaceInit } from "@/components/dev-workspace-init";
+import { NotificationProvider } from "@/components/notification-provider";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -25,6 +27,8 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}
       >
+        <DevWorkspaceInit />
+        <NotificationProvider />
         {children}
         <Toaster theme="dark" richColors position="bottom-right" />
       </body>

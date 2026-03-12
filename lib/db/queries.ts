@@ -9,8 +9,12 @@ import {
   abTestRuns,
   agentMessages,
   integrations,
+  goals,
+  heartbeats,
+  agentBudgets,
+  approvalGates,
 } from "./schema";
-import { eq, and, desc, asc, sql, count } from "drizzle-orm";
+import { eq, and, desc, asc, sql, count, lte } from "drizzle-orm";
 
 // ─── Users ───
 
@@ -211,6 +215,10 @@ export async function createAgent(data: {
   capabilities?: string[];
   model?: string;
   provider?: string;
+  runtime?: string;
+  webhookUrl?: string | null;
+  webhookSecret?: string | null;
+  webhookHeaders?: Record<string, string> | null;
   customSkills?: Array<{
     id: string;
     name: string;
@@ -242,6 +250,10 @@ export async function createAgent(data: {
       capabilities: data.capabilities || [],
       model: data.model || "gpt-5.2",
       provider: data.provider || "openai",
+      runtime: data.runtime || "internal",
+      webhookUrl: data.webhookUrl || null,
+      webhookSecret: data.webhookSecret || null,
+      webhookHeaders: data.webhookHeaders || null,
       customSkills: data.customSkills || null,
       knowledgeFiles: data.knowledgeFiles || null,
       conversationStarters: data.conversationStarters || null,
@@ -264,6 +276,10 @@ export async function updateAgent(
     capabilities: string[];
     model: string;
     provider: string;
+    runtime: string;
+    webhookUrl: string | null;
+    webhookSecret: string | null;
+    webhookHeaders: Record<string, string> | null;
     customSkills: Array<{
       id: string;
       name: string;
@@ -613,4 +629,406 @@ export async function getWorkspaceDashboardStats(workspaceId: string) {
     ...stats,
     totalAgents: agentCount[0]?.count || 0,
   };
+}
+
+// ─── Goals ───
+
+export async function getGoalsByWorkspace(workspaceId: string) {
+  return db
+    .select()
+    .from(goals)
+    .where(eq(goals.workspaceId, workspaceId))
+    .orderBy(desc(goals.priority), asc(goals.createdAt));
+}
+
+export async function getGoalById(id: string) {
+  const [goal] = await db.select().from(goals).where(eq(goals.id, id));
+  return goal ?? null;
+}
+
+export async function getSubGoals(parentGoalId: string) {
+  return db
+    .select()
+    .from(goals)
+    .where(eq(goals.parentGoalId, parentGoalId))
+    .orderBy(desc(goals.priority), asc(goals.createdAt));
+}
+
+export async function createGoal(data: {
+  workspaceId: string;
+  title: string;
+  description?: string | null;
+  parentGoalId?: string | null;
+  assignedAgentId?: string | null;
+  status?: string;
+  priority?: number;
+  dueAt?: Date | null;
+  progress?: number;
+}) {
+  const [goal] = await db
+    .insert(goals)
+    .values({
+      workspaceId: data.workspaceId,
+      title: data.title,
+      description: data.description || null,
+      parentGoalId: data.parentGoalId || null,
+      assignedAgentId: data.assignedAgentId || null,
+      status: (data.status as any) || "active",
+      priority: data.priority ?? 0,
+      dueAt: data.dueAt || null,
+      progress: data.progress ?? 0,
+    })
+    .returning();
+  return goal;
+}
+
+export async function updateGoal(
+  id: string,
+  data: Partial<{
+    title: string;
+    description: string | null;
+    parentGoalId: string | null;
+    assignedAgentId: string | null;
+    status: string;
+    priority: number;
+    dueAt: Date | null;
+    completedAt: Date | null;
+    progress: number;
+  }>
+) {
+  const [goal] = await db
+    .update(goals)
+    .set({ ...data, updatedAt: new Date() } as any)
+    .where(eq(goals.id, id))
+    .returning();
+  return goal;
+}
+
+export async function deleteGoal(id: string) {
+  await db.delete(goals).where(eq(goals.id, id));
+}
+
+// ─── Heartbeats ───
+
+const FREQUENCY_MS: Record<string, number> = {
+  "5m": 5 * 60 * 1000,
+  "15m": 15 * 60 * 1000,
+  "30m": 30 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "4h": 4 * 60 * 60 * 1000,
+  "12h": 12 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+};
+
+export async function getHeartbeatsByWorkspace(workspaceId: string) {
+  return db
+    .select()
+    .from(heartbeats)
+    .where(eq(heartbeats.workspaceId, workspaceId))
+    .orderBy(asc(heartbeats.createdAt));
+}
+
+export async function getHeartbeatsByAgent(agentId: string) {
+  return db
+    .select()
+    .from(heartbeats)
+    .where(eq(heartbeats.agentId, agentId))
+    .orderBy(asc(heartbeats.createdAt));
+}
+
+export async function getHeartbeatById(id: string) {
+  const [heartbeat] = await db
+    .select()
+    .from(heartbeats)
+    .where(eq(heartbeats.id, id));
+  return heartbeat ?? null;
+}
+
+export async function getDueHeartbeats() {
+  return db
+    .select()
+    .from(heartbeats)
+    .where(
+      and(
+        eq(heartbeats.isEnabled, true),
+        lte(heartbeats.nextRunAt, new Date())
+      )
+    );
+}
+
+export async function createHeartbeat(data: {
+  workspaceId: string;
+  agentId: string;
+  task: string;
+  frequency?: string;
+  isEnabled?: boolean;
+}) {
+  const freq = data.frequency || "1h";
+  const intervalMs = FREQUENCY_MS[freq] || FREQUENCY_MS["1h"];
+  const nextRunAt = new Date(Date.now() + intervalMs);
+
+  const [heartbeat] = await db
+    .insert(heartbeats)
+    .values({
+      workspaceId: data.workspaceId,
+      agentId: data.agentId,
+      task: data.task,
+      frequency: freq as any,
+      isEnabled: data.isEnabled ?? true,
+      nextRunAt,
+    })
+    .returning();
+  return heartbeat;
+}
+
+export async function updateHeartbeat(
+  id: string,
+  data: Partial<{
+    task: string;
+    frequency: string;
+    isEnabled: boolean;
+    nextRunAt: Date;
+  }>
+) {
+  const [heartbeat] = await db
+    .update(heartbeats)
+    .set({ ...data, updatedAt: new Date() } as any)
+    .where(eq(heartbeats.id, id))
+    .returning();
+  return heartbeat;
+}
+
+export async function deleteHeartbeat(id: string) {
+  await db.delete(heartbeats).where(eq(heartbeats.id, id));
+}
+
+export async function markHeartbeatRun(
+  id: string,
+  status: string,
+  result: string | null
+) {
+  const heartbeat = await getHeartbeatById(id);
+  if (!heartbeat) throw new Error("Heartbeat not found");
+
+  const freq = heartbeat.frequency || "1h";
+  const intervalMs = FREQUENCY_MS[freq] || FREQUENCY_MS["1h"];
+  const nextRunAt = new Date(Date.now() + intervalMs);
+
+  const [updated] = await db
+    .update(heartbeats)
+    .set({
+      lastRunAt: new Date(),
+      lastStatus: status,
+      lastResult: result,
+      totalRuns: sql`${heartbeats.totalRuns} + 1`,
+      nextRunAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(heartbeats.id, id))
+    .returning();
+  return updated;
+}
+
+// ─── Agent Budgets ───
+
+export async function getBudgetByAgent(agentId: string) {
+  const [budget] = await db
+    .select()
+    .from(agentBudgets)
+    .where(eq(agentBudgets.agentId, agentId));
+  return budget ?? null;
+}
+
+export async function getBudgetsByWorkspace(workspaceId: string) {
+  return db
+    .select({
+      budget: agentBudgets,
+      agentName: agents.name,
+    })
+    .from(agentBudgets)
+    .innerJoin(agents, eq(agentBudgets.agentId, agents.id))
+    .where(eq(agentBudgets.workspaceId, workspaceId))
+    .orderBy(asc(agentBudgets.createdAt));
+}
+
+export async function getBudgetById(id: string) {
+  const [budget] = await db
+    .select()
+    .from(agentBudgets)
+    .where(eq(agentBudgets.id, id));
+  return budget ?? null;
+}
+
+export async function createBudget(data: {
+  workspaceId: string;
+  agentId: string;
+  monthlyLimitUsd: string;
+  warningThreshold?: number;
+}) {
+  const now = new Date();
+  const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+  const [budget] = await db
+    .insert(agentBudgets)
+    .values({
+      workspaceId: data.workspaceId,
+      agentId: data.agentId,
+      monthlyLimitUsd: data.monthlyLimitUsd,
+      warningThreshold: data.warningThreshold ?? 80,
+      periodStart: now,
+      periodEnd,
+    })
+    .returning();
+  return budget;
+}
+
+export async function updateBudget(
+  id: string,
+  data: Partial<{
+    monthlyLimitUsd: string;
+    warningThreshold: number;
+    isThrottled: boolean;
+    currentSpendUsd: string;
+    periodStart: Date;
+    periodEnd: Date;
+  }>
+) {
+  const [budget] = await db
+    .update(agentBudgets)
+    .set({ ...data, updatedAt: new Date() } as any)
+    .where(eq(agentBudgets.id, id))
+    .returning();
+  return budget;
+}
+
+export async function deleteBudget(id: string) {
+  await db.delete(agentBudgets).where(eq(agentBudgets.id, id));
+}
+
+export async function addSpendToBudget(agentId: string, amountUsd: string) {
+  const budget = await getBudgetByAgent(agentId);
+  if (!budget) return null;
+
+  const newSpend = parseFloat(budget.currentSpendUsd) + parseFloat(amountUsd);
+  const limit = parseFloat(budget.monthlyLimitUsd);
+  const isThrottled = newSpend >= limit;
+
+  const [updated] = await db
+    .update(agentBudgets)
+    .set({
+      currentSpendUsd: sql`${agentBudgets.currentSpendUsd}::numeric + ${amountUsd}::numeric`,
+      isThrottled,
+      updatedAt: new Date(),
+    })
+    .where(eq(agentBudgets.agentId, agentId))
+    .returning();
+  return updated;
+}
+
+export async function resetBudgetPeriod(id: string) {
+  const budget = await getBudgetById(id);
+  if (!budget) throw new Error("Budget not found");
+
+  const newPeriodStart = new Date(budget.periodEnd);
+  const newPeriodEnd = new Date(
+    newPeriodStart.getTime() + 30 * 24 * 60 * 60 * 1000
+  );
+
+  const [updated] = await db
+    .update(agentBudgets)
+    .set({
+      currentSpendUsd: "0",
+      isThrottled: false,
+      periodStart: newPeriodStart,
+      periodEnd: newPeriodEnd,
+      updatedAt: new Date(),
+    })
+    .where(eq(agentBudgets.id, id))
+    .returning();
+  return updated;
+}
+
+// ─── Approval Gates ───
+
+export async function getApprovalsByWorkspace(
+  workspaceId: string,
+  options?: { status?: string; limit?: number }
+) {
+  let query = db
+    .select({
+      approval: approvalGates,
+      agentName: agents.name,
+    })
+    .from(approvalGates)
+    .innerJoin(agents, eq(approvalGates.agentId, agents.id))
+    .where(
+      options?.status
+        ? and(
+            eq(approvalGates.workspaceId, workspaceId),
+            eq(approvalGates.status, options.status as any)
+          )
+        : eq(approvalGates.workspaceId, workspaceId)
+    )
+    .orderBy(desc(approvalGates.requestedAt));
+
+  if (options?.limit) {
+    query = query.limit(options.limit) as any;
+  }
+
+  return query;
+}
+
+export async function getPendingApprovals(workspaceId: string) {
+  return getApprovalsByWorkspace(workspaceId, { status: "pending" });
+}
+
+export async function getApprovalById(id: string) {
+  const [approval] = await db
+    .select()
+    .from(approvalGates)
+    .where(eq(approvalGates.id, id));
+  return approval ?? null;
+}
+
+export async function createApproval(data: {
+  workspaceId: string;
+  agentId: string;
+  action: string;
+  actionType: string;
+  runId?: string | null;
+  metadata?: unknown;
+}) {
+  const [approval] = await db
+    .insert(approvalGates)
+    .values({
+      workspaceId: data.workspaceId,
+      agentId: data.agentId,
+      action: data.action,
+      actionType: data.actionType,
+      runId: data.runId || null,
+      metadata: data.metadata || null,
+    } as any)
+    .returning();
+  return approval;
+}
+
+export async function reviewApproval(
+  id: string,
+  data: {
+    status: "approved" | "rejected";
+    reviewedBy: string;
+    reviewNote?: string;
+  }
+) {
+  const [approval] = await db
+    .update(approvalGates)
+    .set({
+      status: data.status,
+      reviewedBy: data.reviewedBy,
+      reviewedAt: new Date(),
+      reviewNote: data.reviewNote || null,
+    } as any)
+    .where(eq(approvalGates.id, id))
+    .returning();
+  return approval;
 }

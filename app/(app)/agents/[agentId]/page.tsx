@@ -13,9 +13,10 @@ import {
   XCircle,
   Clock,
   ArrowDown,
+  BarChart3,
 } from "lucide-react";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher, apiFetch } from "@/lib/api-client";
+import { AgentStatsChart } from "@/components/agents/agent-stats-chart";
 
 interface Message {
   role: "user" | "assistant";
@@ -31,6 +32,7 @@ export default function AgentDetailPage() {
   const [taskInput, setTaskInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [executing, setExecuting] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -47,9 +49,8 @@ export default function AgentDetailPage() {
     setExecuting(true);
 
     try {
-      const res = await fetch(`/api/agents/${agentId}/execute`, {
+      const res = await apiFetch(`/api/agents/${agentId}/execute`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           task: userMsg,
           history: messages,
@@ -167,12 +168,30 @@ export default function AgentDetailPage() {
           </span>
         </div>
         <button
+          onClick={() => setShowStats(!showStats)}
+          className={`p-2 rounded-lg transition-colors ${
+            showStats
+              ? "text-primary bg-primary/10"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+          }`}
+          title="Performance stats"
+        >
+          <BarChart3 className="w-4 h-4" />
+        </button>
+        <button
           onClick={() => router.push(`/agents/${agentId}/edit`)}
           className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
         >
           <Settings className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Stats Panel */}
+      {showStats && (
+        <div className="px-6 py-3 border-b border-border shrink-0">
+          <AgentStatsChart agentId={agentId} />
+        </div>
+      )}
 
       {/* Chat area */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
