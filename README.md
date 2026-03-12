@@ -42,7 +42,7 @@ Lead Agent (Strategic)
 ```
 
 > [!NOTE]
-> **Used in production by [Fleece AI](https://fleeceai.app)** — an AI assistant platform serving thousands of users with 2,500+ app integrations. Fleece AI's autonomous agent teams are powered by the Cohortis engine.
+> **Used in production by [Fleece AI](https://fleeceai.app)** — Autonomous AI Agents & AI Workflow platform with 3,000+ app integrations serving thousands of users. Fleece AI's autonomous agent teams are powered by the Cohortis engine.
 
 <br />
 
@@ -252,12 +252,17 @@ approval_gates
 
 <table>
 <tr>
-<td align="center" width="400">
+<td align="center" width="120">
 <br />
+<a href="https://fleeceai.app">
+<img src="public/fleece-ai-logo.png" alt="Fleece AI" width="80" />
+</a>
+<br /><br />
+</td>
+<td>
 <a href="https://fleeceai.app"><strong>Fleece AI</strong></a>
-<br /><br />
-AI assistant platform with <strong>2,500+ app integrations</strong> serving thousands of users. Uses Cohortis for autonomous agent teams that handle email, calendar, data analysis, and more.
-<br /><br />
+<br />
+Autonomous AI Agents & AI Workflow platform with <strong>3,000+ app integrations</strong> serving thousands of users. Uses Cohortis for autonomous AI agent teams that handle email, calendar, data analysis, and more.
 </td>
 </tr>
 </table>
