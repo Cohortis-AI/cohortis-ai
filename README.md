@@ -1,11 +1,8 @@
-<!-- BANNER — replace with your custom banner -->
-<!-- <p align="center">
-  <img src="public/banner.png" alt="Cohortis AI" width="100%" />
-</p> -->
+<p align="center">
+  <img src="public/banner.png" alt="Cohortis AI — Unifying AI Systems, Deploying the Cohort" width="100%" />
+</p>
 
 <div align="center">
-
-# Cohortis AI
 
 **Deploy AI agent teams that organize, collaborate, and improve themselves.**
 
